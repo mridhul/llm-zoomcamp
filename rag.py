@@ -1,5 +1,6 @@
 import minsearch
 import json
+import os
 
 with open('documents.json', 'rt') as f_in:
     docs_raw = json.load(f_in)
@@ -28,12 +29,10 @@ results = index.search(
 )
 
 #print(results)
+if not results:
+    print("No results found for the query.")
+    exit()
 
-from openai import OpenAI
-import os
-key=os.getenv('GROQ_API_KEY')
-
-client = OpenAI(api_key=key)
 context = ""
 context = context + "section: " + results[0]['section'] + "\n" + "question: " + results[0]['question'] + "\n" + "answer: " + results[0]['text'] + "\n"
 print("Context for the query: ", context)
