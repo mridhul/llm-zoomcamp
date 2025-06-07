@@ -19,26 +19,6 @@ def connect_elasticsearch():
             "request_timeout": 30,
             "max_retries": 3,
             "retry_on_timeout": True
-        },
-        # Connection with basic auth (in case it's enabled)
-        {
-            "hosts": ["http://localhost:9200"],
-            "basic_auth": ("elastic", "changeme"),
-            "verify_certs": False,
-            "ssl_show_warn": False
-        },
-        # Direct IP connection
-        {
-            "hosts": ["http://127.0.0.1:9200"],
-            "verify_certs": False,
-            "ssl_show_warn": False
-        },
-        # Connection with basic auth to IP
-        {
-            "hosts": ["http://127.0.0.1:9200"],
-            "basic_auth": ("elastic", "changeme"),
-            "verify_certs": False,
-            "ssl_show_warn": False
         }
     ]
     
@@ -222,7 +202,19 @@ def search_faq(query, course_filter=None, num_results=3):
     
     try:
         response = es.search(index=ELASTICSEARCH_INDEX, body=search_body)
-        return [hit["_source"] for hit in response["hits"]["hits"]]
+        results = []
+        for hit in response["hits"]["hits"]:
+            # Include both the document and its score
+            doc = hit["_source"].copy()
+            doc["_score"] = hit.get("_score", 0)
+            results.append(doc)
+        
+        # Print debug information
+        print(f"\nSearch results (showing top {len(results)} of {response['hits']['total']['value']}):")
+        for i, result in enumerate(results, 1):
+            print(f"{i}. Score: {result['_score']:.3f} - {result.get('question', 'No question')[:100]}{'...' if len(result.get('question', '')) > 100 else ''}")
+        
+        return results
     except Exception as e:
         print(f"Error searching Elasticsearch: {str(e)}")
         return []
