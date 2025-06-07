@@ -123,14 +123,28 @@ def initialize_index():
                 "section": {"type": "text"},
                 "question": {
                     "type": "text",
-                    "boost": 3.0  # Boost question field more than others
+                    "fields": {
+                        "boosted": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        }
+                    }
                 },
                 "text": {"type": "text"},
-                "section_keyword": {"type": "keyword"}  # For exact section matching
+                "section_keyword": {"type": "keyword"}
             }
         }
     }
-    es.indices.create(index=ELASTICSEARCH_INDEX, body=mapping)
+    
+    # Create the index with the mapping
+    try:
+        es.indices.create(
+            index=ELASTICSEARCH_INDEX,
+            mappings=mapping["mappings"]
+        )
+    except Exception as e:
+        print(f"Error creating index: {str(e)}")
+        raise
     
     # Prepare documents for bulk indexing
     actions = []
@@ -179,29 +193,32 @@ def search_faq(query, course_filter=None, num_results=3):
     Returns:
         List of matching documents with their _source
     """
-    # Build the query
-    must_clauses = [
-        {
-            "multi_match": {
-                "query": query,
-                "fields": ["question^3", "text", "section^0.5"],  # Apply boosting here
-                "fuzziness": "AUTO"
-            }
-        }
-    ]
-    
-    # Add course filter if provided
-    if course_filter:
-        must_clauses.append({"term": {"course": course_filter}})
-    
+    # Build the query with boosting
     search_body = {
         "query": {
             "bool": {
-                "must": must_clauses
+                "must": [
+                    {
+                        "bool": {
+                            "should": [
+                                {"match": {"question": {"query": query, "boost": 3.0}}},
+                                {"match": {"question.boosted": {"query": query, "boost": 2.0}}},
+                                {"match": {"text": query}},
+                                {"match": {"section": {"query": query, "boost": 0.5}}}
+                            ],
+                            "minimum_should_match": 1
+                        }
+                    }
+                ]
             }
         },
-        "size": num_results
+        "size": num_results,
+        "min_score": 0.1  # Only return results with a minimum score
     }
+    
+    # Add course filter if provided
+    if course_filter:
+        search_body["query"]["bool"]["filter"] = [{"term": {"course": course_filter}}]
     
     try:
         response = es.search(index=ELASTICSEARCH_INDEX, body=search_body)
